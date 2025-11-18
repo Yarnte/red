@@ -2,11 +2,12 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { getUserProfile } from '../services/dataService';
+import { SITES_DATA_FOR_FIRESTORE } from '../constants';
 import { Role } from '../types';
-import { SITES } from '../constants';
 import { SunIcon } from './Icons';
 
-// Hardcoded emails matching your Firebase Authentication
+// Hardcoded emails for security and simplicity.
+// These users MUST exist in the Firebase Authentication console.
 const ADMIN_EMAIL = 'administrator@stelco.com.mv';
 const OPERATOR_EMAIL = 'operator@stelco.com.mv';
 
@@ -17,13 +18,14 @@ const LoginScreen: React.FC = () => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    // Use local constant for the island list
+    // Use the local constant for the island list to prevent permission errors before login.
     const availableIslands = useMemo(() => {
-        const islands = ['all', ...Array.from(new Set(SITES.map((site) => `${site.atoll}. ${site.island}`))).sort()];
+        const islands = ['all', ...Array.from(new Set(SITES_DATA_FOR_FIRESTORE.map(site => `${site.atoll}. ${site.island}`))).sort()];
         return selectedRole === Role.USER ? islands.filter(i => i !== 'all') : islands;
     }, [selectedRole]);
 
     useEffect(() => {
+        // When switching roles, reset the selected island
         if (selectedRole === Role.USER && availableIslands.length > 0) {
              setSelectedIsland(availableIslands[0]);
         } else if (selectedRole === Role.ADMIN) {
@@ -33,10 +35,13 @@ const LoginScreen: React.FC = () => {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // Validation: Password is now required for BOTH roles
         if (!password) {
             setError('Password is required.');
             return;
         }
+        
         setIsLoading(true);
         setError('');
 
@@ -47,16 +52,18 @@ const LoginScreen: React.FC = () => {
                  throw new Error('Operators must select a specific island.');
             }
 
-            // 1. Authenticate with Firebase Auth using the entered password
+            // Step 1: Authenticate with Firebase Auth using the user-entered password
             const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
             
-            // 2. Verify user profile
+            // Step 2: Immediately verify the user profile exists in Firestore.
             const userProfile = await getUserProfile(userCredential.user.uid);
             if (!userProfile) {
+                // If the profile is not found, sign the user out immediately and show a specific, helpful error.
                 await auth.signOut();
-                throw new Error(`Authentication successful, but user profile not found (UID: ${userCredential.user.uid}). Check Firestore.`);
+                throw new Error('Authentication successful, but user profile not found in database. Please check your Firestore setup.');
             }
             
+            // If both steps succeed, save the selected island.
             localStorage.setItem('selectedIsland', selectedIsland);
 
         } catch (err: any) {
@@ -64,7 +71,9 @@ const LoginScreen: React.FC = () => {
              if (err.message && (err.message.includes('user profile not found') || err.message.includes('specific island'))) {
                 setError(err.message);
             } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-                setError('Incorrect password.');
+                setError('Incorrect password. Please try again.');
+            } else if (err.code === 'auth/too-many-requests') {
+                setError('Too many failed attempts. Please try again later.');
             } else {
                  setError('An unknown error occurred during login.');
             }
@@ -105,13 +114,21 @@ const LoginScreen: React.FC = () => {
                     
                     <div>
                         <label htmlFor="password-input" className="block text-sm font-medium text-gray-700">Password</label>
-                        <input id="password-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 text-base border-gray-300 rounded-md" placeholder="Enter your password" required />
+                        <input 
+                            id="password-input" 
+                            type="password" 
+                            value={password} 
+                            onChange={(e) => setPassword(e.target.value)} 
+                            className="mt-1 block w-full px-3 py-2 text-base border-gray-300 rounded-md" 
+                            placeholder="Enter your password" 
+                            required 
+                        />
                     </div>
 
                      <div>
                         <label htmlFor="island-select" className="block text-sm font-medium text-gray-700">Select Island to View</label>
                         <select id="island-select" value={selectedIsland} onChange={(e) => setSelectedIsland(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
-                           {availableIslands.map((island) => (
+                           {availableIslands.map(island => (
                                 <option key={island} value={island}>
                                     {island === 'all' ? 'All Islands' : island}
                                 </option>
