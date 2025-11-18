@@ -10,7 +10,8 @@ import {
     onSnapshot,
     query
 } from 'firebase/firestore';
-import { User, Site, Reading, Role } from '../types';
+// FIXED: Removed unused 'Role' import
+import { User, Site, Reading } from '../types';
 
 // --- User Profile Functions ---
 export const getUserProfile = async (uid: string): Promise<User | null> => {
