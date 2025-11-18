@@ -1,56 +1,77 @@
-import React, { useState, useMemo } from 'react';
-import { User, Role } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebaseConfig';
+import { getUserProfile } from '../services/dataService';
+import { Role } from '../types';
 import { SITES } from '../constants';
 import { SunIcon } from './Icons';
 
-interface LoginScreenProps {
-    users: User[];
-    onLogin: (user: User, island: string) => void;
-}
+// Hardcoded emails matching your Firebase Authentication
+const ADMIN_EMAIL = 'administrator@stelco.com.mv';
+const OPERATOR_EMAIL = 'operator@stelco.com.mv';
 
-const allIslands = ['all', ...Array.from(new Set(SITES.map(site => `${site.atoll}. ${site.island}`)))];
-const operatorIslands = allIslands.filter(i => i !== 'all');
-
-const LoginScreen: React.FC<LoginScreenProps> = ({ users, onLogin }) => {
+const LoginScreen: React.FC = () => {
     const [selectedRole, setSelectedRole] = useState<Role>(Role.ADMIN);
-    const [selectedIsland, setSelectedIsland] = useState<string>('all');
     const [password, setPassword] = useState('');
+    const [selectedIsland, setSelectedIsland] = useState<string>('all');
     const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleRoleChange = (role: Role) => {
-        setSelectedRole(role);
-        // If switching to Operator, ensure a valid island is selected
-        if (role === Role.USER) {
-            setSelectedIsland(operatorIslands[0] || '');
-        } else {
-            setSelectedIsland('all');
-        }
-    };
-    
+    // Use local constant for the island list
     const availableIslands = useMemo(() => {
-        return selectedRole === Role.ADMIN ? allIslands : operatorIslands;
+        const islands = ['all', ...Array.from(new Set(SITES.map((site) => `${site.atoll}. ${site.island}`))).sort()];
+        return selectedRole === Role.USER ? islands.filter(i => i !== 'all') : islands;
     }, [selectedRole]);
 
-    const handleLogin = () => {
+    useEffect(() => {
+        if (selectedRole === Role.USER && availableIslands.length > 0) {
+             setSelectedIsland(availableIslands[0]);
+        } else if (selectedRole === Role.ADMIN) {
+            setSelectedIsland('all');
+        }
+    }, [selectedRole, availableIslands]);
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!password) {
+            setError('Password is required.');
+            return;
+        }
+        setIsLoading(true);
         setError('');
-        const user = users.find(u => u.role === selectedRole);
-        if (!user) {
-            setError('Invalid role selected.');
-            return;
-        }
 
-        // Password check for BOTH roles
-        if (password !== 'stelco') {
-             setError('Invalid password.');
-             return;
-        }
-        
-        if(selectedRole === Role.USER && !selectedIsland) {
-            setError('Please select an island to continue.');
-            return;
-        }
+        const emailToUse = selectedRole === Role.ADMIN ? ADMIN_EMAIL : OPERATOR_EMAIL;
 
-        onLogin(user, selectedIsland);
+        try {
+            if (selectedRole === Role.USER && (selectedIsland === 'all' || !selectedIsland)) {
+                 throw new Error('Operators must select a specific island.');
+            }
+
+            // 1. Authenticate with Firebase Auth using the entered password
+            const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
+            
+            // 2. Verify user profile
+            const userProfile = await getUserProfile(userCredential.user.uid);
+            if (!userProfile) {
+                await auth.signOut();
+                throw new Error(`Authentication successful, but user profile not found (UID: ${userCredential.user.uid}). Check Firestore.`);
+            }
+            
+            localStorage.setItem('selectedIsland', selectedIsland);
+
+        } catch (err: any) {
+            console.error(err);
+             if (err.message && (err.message.includes('user profile not found') || err.message.includes('specific island'))) {
+                setError(err.message);
+            } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+                setError('Incorrect password.');
+            } else {
+                 setError('An unknown error occurred during login.');
+            }
+            localStorage.removeItem('selectedIsland');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -61,20 +82,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ users, onLogin }) => {
                     <h1 className="mt-4 text-3xl font-bold tracking-tight text-brand-blue">Solar PV Monitoring System</h1>
                     <p className="mt-2 text-lg text-gray-600">Renewable Energy Department</p>
                 </div>
-                <div className="space-y-6">
+                <form onSubmit={handleLogin} className="space-y-6">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Login As</label>
                         <div className="mt-1 flex rounded-md shadow-sm">
                             <button
                                 type="button"
-                                onClick={() => handleRoleChange(Role.ADMIN)}
+                                onClick={() => setSelectedRole(Role.ADMIN)}
                                 className={`flex-1 px-4 py-2 text-sm font-medium border transition-colors ${selectedRole === Role.ADMIN ? 'bg-brand-blue text-white border-brand-blue z-10' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'} rounded-l-md focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue`}
                             >
                                 Administrator
                             </button>
                             <button
                                 type="button"
-                                onClick={() => handleRoleChange(Role.USER)}
+                                onClick={() => setSelectedRole(Role.USER)}
                                 className={`-ml-px flex-1 px-4 py-2 text-sm font-medium border transition-colors ${selectedRole === Role.USER ? 'bg-brand-blue text-white border-brand-blue z-10' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'} rounded-r-md focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue`}
                             >
                                 Operator
@@ -83,46 +104,28 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ users, onLogin }) => {
                     </div>
                     
                     <div>
-                        <label htmlFor="password-input" className="block text-sm font-medium text-gray-700">
-                            Password
-                        </label>
-                        <input
-                            id="password-input"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="mt-1 block w-full px-3 py-2 text-base border-gray-300 focus:outline-none focus:ring-brand-blue focus:border-brand-blue sm:text-sm rounded-md"
-                            placeholder="Enter password"
-                        />
+                        <label htmlFor="password-input" className="block text-sm font-medium text-gray-700">Password</label>
+                        <input id="password-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 text-base border-gray-300 rounded-md" placeholder="Enter your password" required />
                     </div>
 
-                    <div>
-                        <label htmlFor="island-select" className="block text-sm font-medium text-gray-700">
-                            Select Island to View
-                        </label>
-                        <select
-                            id="island-select"
-                            value={selectedIsland}
-                            onChange={(e) => setSelectedIsland(e.target.value)}
-                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-brand-blue focus:border-brand-blue sm:text-sm rounded-md"
-                        >
-                            {availableIslands.map(island => (
+                     <div>
+                        <label htmlFor="island-select" className="block text-sm font-medium text-gray-700">Select Island to View</label>
+                        <select id="island-select" value={selectedIsland} onChange={(e) => setSelectedIsland(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                           {availableIslands.map((island) => (
                                 <option key={island} value={island}>
                                     {island === 'all' ? 'All Islands' : island}
                                 </option>
                             ))}
                         </select>
+                         <p className="mt-1 text-xs text-gray-500">Operators will be restricted to their assigned island.</p>
                     </div>
 
                     {error && <p className="text-sm text-red-600 text-center">{error}</p>}
-
-                    <button
-                        onClick={handleLogin}
-                        className="w-full px-4 py-3 text-lg font-semibold text-white transition-all duration-300 bg-brand-blue rounded-lg hover:bg-brand-blue-light focus:outline-none focus:ring-4 focus:ring-blue-300"
-                    >
-                        Login
+                    
+                    <button type="submit" disabled={isLoading} className="w-full px-4 py-3 text-lg font-semibold text-white bg-brand-blue rounded-lg hover:bg-brand-blue-light disabled:bg-gray-400">
+                        {isLoading ? 'Logging in...' : 'Login'}
                     </button>
-                </div>
+                </form>
             </div>
         </div>
     );
