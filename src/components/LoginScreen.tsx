@@ -1,16 +1,14 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
-import { getUserProfile } from '../services/dataService';
+import { getUserProfile, getAllSites } from '../services/dataService';
 import { SITES_DATA_FOR_FIRESTORE } from '../constants';
 import { Role } from '../types';
 import { SunIcon } from './Icons';
 
-// Hardcoded emails for security and simplicity.
+// Hardcoded emails matching your Firebase Authentication
 const ADMIN_EMAIL = 'administrator@stelco.com.mv';
 const OPERATOR_EMAIL = 'operator@stelco.com.mv';
-const OPERATOR_DEFAULT_PASSWORD = 'stelco123'; 
 
 const LoginScreen: React.FC = () => {
     const [selectedRole, setSelectedRole] = useState<Role>(Role.ADMIN);
@@ -19,7 +17,7 @@ const LoginScreen: React.FC = () => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    // Use local constant for islands to avoid permission errors before login
+    // Use local constant for the island list to prevent permission errors before login.
     const availableIslands = useMemo(() => {
         const islands = ['all', ...Array.from(new Set(SITES_DATA_FOR_FIRESTORE.map(site => `${site.atoll}. ${site.island}`))).sort()];
         return selectedRole === Role.USER ? islands.filter(i => i !== 'all') : islands;
@@ -35,32 +33,28 @@ const LoginScreen: React.FC = () => {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
-
-        // Logic for "No Password" Operator login
-        const emailToUse = selectedRole === Role.ADMIN ? ADMIN_EMAIL : OPERATOR_EMAIL;
-        const passwordToUse = selectedRole === Role.ADMIN ? password : OPERATOR_DEFAULT_PASSWORD;
-
-        if (selectedRole === Role.ADMIN && !password) {
+        if (!password) {
             setError('Password is required.');
             return;
         }
-
         setIsLoading(true);
+        setError('');
+
+        const emailToUse = selectedRole === Role.ADMIN ? ADMIN_EMAIL : OPERATOR_EMAIL;
 
         try {
             if (selectedRole === Role.USER && (selectedIsland === 'all' || !selectedIsland)) {
                  throw new Error('Operators must select a specific island.');
             }
+
+            // 1. Authenticate with Firebase Auth using the entered password
+            const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
             
-            // Step 1: Firebase Auth
-            const userCredential = await signInWithEmailAndPassword(auth, emailToUse, passwordToUse);
-            
-            // Step 2: Check Firestore Profile
+            // 2. Immediately verify the user profile exists in Firestore.
             const userProfile = await getUserProfile(userCredential.user.uid);
             if (!userProfile) {
                 await auth.signOut();
-                throw new Error('Authentication successful, but user profile not found in database. Please check your Firestore setup.');
+                throw new Error(`Authentication successful, but user profile not found in database (UID: ${userCredential.user.uid}). Please check your Firestore setup.`);
             }
             
             localStorage.setItem('selectedIsland', selectedIsland);
@@ -109,12 +103,10 @@ const LoginScreen: React.FC = () => {
                         </div>
                     </div>
                     
-                    {selectedRole === Role.ADMIN && (
-                        <div>
-                            <label htmlFor="password-input" className="block text-sm font-medium text-gray-700">Password</label>
-                            <input id="password-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 text-base border-gray-300 rounded-md" placeholder="Enter your password" required />
-                        </div>
-                    )}
+                    <div>
+                        <label htmlFor="password-input" className="block text-sm font-medium text-gray-700">Password</label>
+                        <input id="password-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 text-base border-gray-300 rounded-md" placeholder="Enter your password" required />
+                    </div>
 
                      <div>
                         <label htmlFor="island-select" className="block text-sm font-medium text-gray-700">Select Island to View</label>
