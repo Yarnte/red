@@ -42,7 +42,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ site, readings, onBack, onEditR
     const lifetimeFormatted = formatEnergy(lifetimeProduction);
     const currentMonthFormatted = formatEnergy(currentMonthProduction);
 
-
     const chartData = useMemo(() => {
         const today = new Date();
         return Array.from({ length: 12 }, (_, i) => {
