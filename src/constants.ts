@@ -3,7 +3,7 @@ import { Site } from './types';
 const PEAK_SUN_HOURS = 4.5;
 const AVG_DAYS_IN_MONTH = 30;
 
-export const SITES_DATA_FOR_FIRESTORE: Site[] = [
+export const SITES: Site[] = [
     { id: 1, name: 'Dhiffushi Harbour area Solar Project', atoll: 'K', island: 'Dhiffushi', capacityKw: 41.16, expectedMonthlyKwh: 41.16 * PEAK_SUN_HOURS * AVG_DAYS_IN_MONTH, meterNumber: '87394', commissionedDate: '1/26/2018', gpsCoordinates: '4.441086, 73.714748' },
     { id: 4, name: 'Adh. Omadhoo new PH', atoll: 'ADH', island: 'Omadhoo', capacityKw: 38.94, expectedMonthlyKwh: 38.94 * PEAK_SUN_HOURS * AVG_DAYS_IN_MONTH, meterNumber: '19100006525', commissionedDate: '28/Aug/2021', gpsCoordinates: '' },
     { id: 5, name: 'Male\' Powerhouse Bus Station', atoll: 'K', island: 'Male\'', capacityKw: 6.6, expectedMonthlyKwh: 6.6 * PEAK_SUN_HOURS * AVG_DAYS_IN_MONTH, meterNumber: 'Nil', commissionedDate: '22-Oct-20', gpsCoordinates: '' },
@@ -62,5 +62,3 @@ export const SITES_DATA_FOR_FIRESTORE: Site[] = [
     { id: 61, name: 'STELCO V.Rakeedhoo PH office', atoll: 'V', island: 'Rakeedhoo', capacityKw: 18.3, expectedMonthlyKwh: 18.3 * PEAK_SUN_HOURS * AVG_DAYS_IN_MONTH, meterNumber: '503200107807', commissionedDate: '16-Oct-24', gpsCoordinates: '' },
     { id: 62, name: 'STELCO V.Rakeedhoo PH Control roof', atoll: 'V', island: 'Rakeedhoo', capacityKw: 16.6, expectedMonthlyKwh: 16.6 * PEAK_SUN_HOURS * AVG_DAYS_IN_MONTH, meterNumber: '503200107807', commissionedDate: '16-Oct-24', gpsCoordinates: '' },
 ];
-
-export const SITES = SITES_DATA_FOR_FIRESTORE;
