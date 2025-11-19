@@ -1,7 +1,7 @@
 import React, { useContext, useMemo } from 'react';
 import { Site, Reading, Role } from '../types';
 import { AuthContext } from '../App';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { MapPinIcon, EditIcon } from './Icons';
 
 interface SiteDetailProps {
@@ -65,16 +65,16 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ site, readings, onBack, onEditR
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Production Data Chart (kWh)</h3>
                 <div style={{ width: '100%', height: 400 }}>
                     <ResponsiveContainer>
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                        <ComposedChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="date" />
                             <YAxis />
                             <Tooltip />
                             <Legend />
-                            <Line connectNulls type="monotone" dataKey="Production" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                            <Bar dataKey="Production" fill="#10b981" radius={[4, 4, 0, 0]} />
                             <Line type="monotone" dataKey="Expected" stroke="#3b82f6" strokeDasharray="5 5" dot={false} />
                             <Line type="monotone" dataKey="50% Threshold" stroke="#ef4444" strokeDasharray="5 5" dot={false} />
-                        </LineChart>
+                        </ComposedChart>
                     </ResponsiveContainer>
                 </div>
             </div>
