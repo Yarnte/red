@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { getUserProfile } from '../services/dataService';
-import { SITES } from '../constants'; // Use the local constant
+import { SITES } from '../constants';
 import { Role } from '../types';
 import { SunIcon } from './Icons';
 
@@ -19,7 +19,7 @@ const LoginScreen: React.FC = () => {
 
     // Use the local constant for the island list to prevent permission errors before login.
     const availableIslands = useMemo(() => {
-        const islands = ['all', ...Array.from(new Set(SITES.map(site => `${site.atoll}. ${site.island}`))).sort()];
+        const islands = ['all', ...Array.from(new Set(SITES.map((site) => `${site.atoll}. ${site.island}`))).sort()];
         return selectedRole === Role.USER ? islands.filter(i => i !== 'all') : islands;
     }, [selectedRole]);
 
@@ -47,10 +47,10 @@ const LoginScreen: React.FC = () => {
                  throw new Error('Operators must select a specific island.');
             }
 
-            // Step 1: Authenticate with Firebase Auth using the user-entered password
+            // Step 1: Authenticate with Firebase Auth using the entered password
             const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
             
-            // Step 2: Immediately verify the user profile exists in Firestore.
+            // Step 2: Verify user profile
             const userProfile = await getUserProfile(userCredential.user.uid);
             if (!userProfile) {
                 await auth.signOut();
@@ -64,9 +64,7 @@ const LoginScreen: React.FC = () => {
              if (err.message && (err.message.includes('user profile not found') || err.message.includes('specific island'))) {
                 setError(err.message);
             } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-                setError('Incorrect password. Please try again.');
-            } else if (err.code === 'auth/too-many-requests') {
-                setError('Too many failed attempts. Please try again later.');
+                setError('Incorrect password.');
             } else {
                  setError('An unknown error occurred during login.');
             }
@@ -121,7 +119,7 @@ const LoginScreen: React.FC = () => {
                      <div>
                         <label htmlFor="island-select" className="block text-sm font-medium text-gray-700">Select Island to View</label>
                         <select id="island-select" value={selectedIsland} onChange={(e) => setSelectedIsland(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
-                           {availableIslands.map(island => (
+                           {availableIslands.map((island) => (
                                 <option key={island} value={island}>
                                     {island === 'all' ? 'All Islands' : island}
                                 </option>
