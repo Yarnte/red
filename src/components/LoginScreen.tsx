@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { getUserProfile } from '../services/dataService';
@@ -6,8 +6,7 @@ import { SITES_DATA_FOR_FIRESTORE } from '../constants';
 import { Role } from '../types';
 import { SunIcon } from './Icons';
 
-// Hardcoded emails for security and simplicity.
-// These users MUST exist in the Firebase Authentication console.
+// Hardcoded emails matching your Firebase Authentication
 const ADMIN_EMAIL = 'administrator@stelco.com.mv';
 const OPERATOR_EMAIL = 'operator@stelco.com.mv';
 
@@ -24,8 +23,8 @@ const LoginScreen: React.FC = () => {
         return selectedRole === Role.USER ? islands.filter(i => i !== 'all') : islands;
     }, [selectedRole]);
 
-    useEffect(() => {
-        // When switching roles, reset the selected island
+    // Reset selection when role changes
+    useMemo(() => {
         if (selectedRole === Role.USER && availableIslands.length > 0) {
              setSelectedIsland(availableIslands[0]);
         } else if (selectedRole === Role.ADMIN) {
@@ -36,7 +35,7 @@ const LoginScreen: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Validation: Password is now required for BOTH roles
+        // Password is now required for BOTH roles
         if (!password) {
             setError('Password is required.');
             return;
@@ -58,7 +57,7 @@ const LoginScreen: React.FC = () => {
             // Step 2: Immediately verify the user profile exists in Firestore.
             const userProfile = await getUserProfile(userCredential.user.uid);
             if (!userProfile) {
-                // If the profile is not found, sign the user out immediately and show a specific, helpful error.
+                // If the profile is not found, sign the user out immediately and show a specific error.
                 await auth.signOut();
                 throw new Error('Authentication successful, but user profile not found in database. Please check your Firestore setup.');
             }
