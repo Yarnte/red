@@ -62,3 +62,7 @@ export const SITES: Site[] = [
     { id: 61, name: 'STELCO V.Rakeedhoo PH office', atoll: 'V', island: 'Rakeedhoo', capacityKw: 18.3, expectedMonthlyKwh: 18.3 * PEAK_SUN_HOURS * AVG_DAYS_IN_MONTH, meterNumber: '503200107807', commissionedDate: '16-Oct-24', gpsCoordinates: '' },
     { id: 62, name: 'STELCO V.Rakeedhoo PH Control roof', atoll: 'V', island: 'Rakeedhoo', capacityKw: 16.6, expectedMonthlyKwh: 16.6 * PEAK_SUN_HOURS * AVG_DAYS_IN_MONTH, meterNumber: '503200107807', commissionedDate: '16-Oct-24', gpsCoordinates: '' },
 ];
+
+export const SITES_DATA_FOR_FIRESTORE = SITES;
+export const USERS = []; // Not used in live version
+export const INITIAL_READINGS = []; // Not used in live version
