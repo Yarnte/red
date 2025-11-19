@@ -2,7 +2,7 @@ import React, { useContext, useMemo } from 'react';
 import { Site, Reading, Role } from '../types';
 import { AuthContext } from '../App';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { MapPinIcon, EditIcon } from './Icons';
+import { MapPinIcon, EditIcon, ZapIcon, ServerIcon } from './Icons';
 
 interface SiteDetailProps {
     site: Site;
@@ -18,11 +18,30 @@ const formatMonthForTable = (dateStr: string) => {
     return date.toLocaleString('default', { month: 'long', year: 'numeric' });
 };
 
+const formatEnergy = (kwh: number) => {
+    if (kwh >= 1000000) {
+        return { value: (kwh / 1000000).toFixed(2), unit: 'GWh' };
+    } else if (kwh >= 1000) {
+        return { value: (kwh / 1000).toFixed(2), unit: 'MWh' };
+    }
+    return { value: kwh.toLocaleString(), unit: 'kWh' };
+};
+
 const SiteDetail: React.FC<SiteDetailProps> = ({ site, readings, onBack, onEditReading }) => {
     const authContext = useContext(AuthContext);
     const user = authContext?.user;
     
     const sortedReadings = [...readings].sort((a, b) => b.date.localeCompare(a.date));
+
+    // Calculate Stats
+    const currentMonthStr = new Date().toISOString().slice(0, 7);
+    const currentMonthReading = readings.find(r => r.date === currentMonthStr);
+    const currentMonthProduction = currentMonthReading ? currentMonthReading.valueKwh : 0;
+    const lifetimeProduction = readings.reduce((acc, curr) => acc + curr.valueKwh, 0);
+    
+    const lifetimeFormatted = formatEnergy(lifetimeProduction);
+    const currentMonthFormatted = formatEnergy(currentMonthProduction);
+
 
     const chartData = useMemo(() => {
         const today = new Date();
@@ -61,6 +80,48 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ site, readings, onBack, onEditR
                     </div>
                 </div>
             </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                {/* Card 1: This Month */}
+                <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-brand-blue flex items-center justify-between relative overflow-hidden">
+                    <div className="relative z-10">
+                        <p className="text-gray-500 text-sm font-medium uppercase tracking-wide">Production</p>
+                        <div className="mt-1">
+                             <span className="text-sm text-brand-blue bg-blue-100 px-2 py-0.5 rounded-full font-medium">This Month</span>
+                        </div>
+                        <p className="text-4xl font-bold text-brand-blue mt-2">
+                            {currentMonthFormatted.value} <span className="text-xl text-gray-500 font-medium">{currentMonthFormatted.unit}</span>
+                        </p>
+                    </div>
+                    <div className="p-3 bg-blue-50 rounded-full relative z-10">
+                        <ZapIcon className="h-10 w-10 text-brand-blue" />
+                    </div>
+                     <div className="absolute right-0 bottom-0 opacity-5">
+                        <ZapIcon className="h-32 w-32" />
+                    </div>
+                </div>
+
+                {/* Card 2: Lifetime */}
+                <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-brand-blue flex items-center justify-between relative overflow-hidden">
+                    <div className="relative z-10">
+                        <p className="text-gray-500 text-sm font-medium uppercase tracking-wide">Production</p>
+                        <div className="mt-1">
+                             <span className="text-sm text-brand-blue bg-blue-100 px-2 py-0.5 rounded-full font-medium">Lifetime</span>
+                        </div>
+                        <p className="text-4xl font-bold text-brand-blue mt-2">
+                            {lifetimeFormatted.value} <span className="text-xl text-gray-500 font-medium">{lifetimeFormatted.unit}</span>
+                        </p>
+                    </div>
+                    <div className="p-3 bg-blue-50 rounded-full relative z-10">
+                        <ServerIcon className="h-10 w-10 text-brand-blue" />
+                    </div>
+                    <div className="absolute right-0 bottom-0 opacity-5">
+                        <ServerIcon className="h-32 w-32" />
+                    </div>
+                </div>
+            </div>
+
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg">
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Production Data Chart (kWh)</h3>
                 <div style={{ width: '100%', height: 400 }}>
@@ -71,9 +132,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ site, readings, onBack, onEditR
                             <YAxis />
                             <Tooltip />
                             <Legend />
-                            <Bar dataKey="Production" fill="#10b981" radius={[4, 4, 0, 0]} />
-                            <Line type="monotone" dataKey="Expected" stroke="#3b82f6" strokeDasharray="5 5" dot={false} />
-                            <Line type="monotone" dataKey="50% Threshold" stroke="#ef4444" strokeDasharray="5 5" dot={false} />
+                            <Bar dataKey="Production" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                            <Line type="monotone" dataKey="Expected" stroke="#3b82f6" strokeWidth={3} strokeDasharray="5 5" dot={{r:4}} />
+                            <Line type="monotone" dataKey="50% Threshold" stroke="#ef4444" strokeWidth={2} strokeDasharray="3 3" dot={false} />
                         </ComposedChart>
                     </ResponsiveContainer>
                 </div>
