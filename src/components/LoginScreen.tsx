@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { getUserProfile } from '../services/dataService';
@@ -6,7 +6,8 @@ import { SITES_DATA_FOR_FIRESTORE } from '../constants';
 import { Role } from '../types';
 import { SunIcon } from './Icons';
 
-// Hardcoded emails matching your Firebase Authentication
+// Hardcoded emails for security and simplicity.
+// These users MUST exist in the Firebase Authentication console.
 const ADMIN_EMAIL = 'administrator@stelco.com.mv';
 const OPERATOR_EMAIL = 'operator@stelco.com.mv';
 
@@ -17,14 +18,12 @@ const LoginScreen: React.FC = () => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    // Use the local constant for the island list to prevent permission errors before login.
     const availableIslands = useMemo(() => {
         const islands = ['all', ...Array.from(new Set(SITES_DATA_FOR_FIRESTORE.map(site => `${site.atoll}. ${site.island}`))).sort()];
         return selectedRole === Role.USER ? islands.filter(i => i !== 'all') : islands;
     }, [selectedRole]);
 
-    // Reset selection when role changes
-    useMemo(() => {
+    useEffect(() => {
         if (selectedRole === Role.USER && availableIslands.length > 0) {
              setSelectedIsland(availableIslands[0]);
         } else if (selectedRole === Role.ADMIN) {
@@ -35,7 +34,7 @@ const LoginScreen: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Password is now required for BOTH roles
+        // Password is required for BOTH roles
         if (!password) {
             setError('Password is required.');
             return;
@@ -51,18 +50,16 @@ const LoginScreen: React.FC = () => {
                  throw new Error('Operators must select a specific island.');
             }
 
-            // Step 1: Authenticate with Firebase Auth using the user-entered password
+            // 1. Authenticate with Firebase Auth
             const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
             
-            // Step 2: Immediately verify the user profile exists in Firestore.
+            // 2. Verify user profile
             const userProfile = await getUserProfile(userCredential.user.uid);
             if (!userProfile) {
-                // If the profile is not found, sign the user out immediately and show a specific error.
                 await auth.signOut();
                 throw new Error('Authentication successful, but user profile not found in database. Please check your Firestore setup.');
             }
             
-            // If both steps succeed, save the selected island.
             localStorage.setItem('selectedIsland', selectedIsland);
 
         } catch (err: any) {
@@ -70,9 +67,7 @@ const LoginScreen: React.FC = () => {
              if (err.message && (err.message.includes('user profile not found') || err.message.includes('specific island'))) {
                 setError(err.message);
             } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-                setError('Incorrect password. Please try again.');
-            } else if (err.code === 'auth/too-many-requests') {
-                setError('Too many failed attempts. Please try again later.');
+                setError('Incorrect password.');
             } else {
                  setError('An unknown error occurred during login.');
             }
