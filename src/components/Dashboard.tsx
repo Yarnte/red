@@ -1,198 +1,142 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebaseConfig';
+import { getUserProfile } from '../services/dataService';
+import { SITES } from '../constants';
+import { Role } from '../types';
+import { SunIcon } from './Icons';
 
-import React, { useState, useContext, useEffect, useMemo, useRef } from 'react';
-import { AuthContext } from '../App';
-import * as dataService from '../services/dataService';
-import { Site, Reading, Role } from '../types';
-import Header from './Header';
-import SiteCard from './SiteCard';
-import SiteDetail from './SiteDetail';
-import Reports from './Reports';
-import AggregateStats from './AggregateStats';
-import BreakdownView from './BreakdownView';
-import { ChevronDownIcon } from './Icons';
-import MeterReadingModal from './MeterReadingModal';
-import EditReadingModal from './EditReadingModal';
-import AddSiteModal from './AddSiteModal';
-import EditSiteModal from './EditSiteModal';
-import SelectSiteModal from './SelectSiteModal';
+// Hardcoded emails matching your Firebase Authentication
+const ADMIN_EMAIL = 'administrator@stelco.com.mv';
+const OPERATOR_EMAIL = 'operator@stelco.com.mv';
 
-type View = 'dashboard' | 'reports';
+const LoginScreen: React.FC = () => {
+    const [selectedRole, setSelectedRole] = useState<Role>(Role.ADMIN);
+    const [password, setPassword] = useState('');
+    const [selectedIsland, setSelectedIsland] = useState<string>('all');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-const Dashboard: React.FC = () => {
-    const authContext = useContext(AuthContext);
-    const [sites, setSites] = useState<Site[]>([]);
-    const [readings, setReadings] = useState<Reading[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [selectedSite, setSelectedSite] = useState<Site | null>(null);
-    const [view, setView] = useState<View>('dashboard');
-    
-    const [isAddReadingModalOpen, setIsAddReadingModalOpen] = useState(false);
-    const [isEditReadingModalOpen, setIsEditReadingModalOpen] = useState(false);
-    const [editingReading, setEditingReading] = useState<Reading | null>(null);
-    const [isAddSiteModalOpen, setIsAddSiteModalOpen] = useState(false);
-    const [isSelectSiteModalOpen, setIsSelectSiteModalOpen] = useState(false);
-    const [isEditSiteModalOpen, setIsEditSiteModalOpen] = useState(false);
-    const [editingSite, setEditingSite] = useState<Site | null>(null);
-    const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
-    const actionsMenuRef = useRef<HTMLDivElement>(null);
+    // Use the local constant for the island list to prevent permission errors before login.
+    const availableIslands = useMemo(() => {
+        const islands = ['all', ...Array.from(new Set(SITES.map((site) => `${site.atoll}. ${site.island}`))).sort()];
+        return selectedRole === Role.USER ? islands.filter(i => i !== 'all') : islands;
+    }, [selectedRole]);
 
     useEffect(() => {
+        if (selectedRole === Role.USER && availableIslands.length > 0) {
+             setSelectedIsland(availableIslands[0]);
+        } else if (selectedRole === Role.ADMIN) {
+            setSelectedIsland('all');
+        }
+    }, [selectedRole, availableIslands]);
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!password) {
+            setError('Password is required.');
+            return;
+        }
         setIsLoading(true);
-        const unsubscribeSites = dataService.onSitesUpdate(setSites);
-        const unsubscribeReadings = dataService.onReadingsUpdate(setReadings, () => setIsLoading(false));
+        setError('');
 
-        return () => {
-            unsubscribeSites();
-            unsubscribeReadings();
-        };
-    }, []);
+        const emailToUse = selectedRole === Role.ADMIN ? ADMIN_EMAIL : OPERATOR_EMAIL;
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
-                setIsActionsMenuOpen(false);
+        try {
+            if (selectedRole === Role.USER && (selectedIsland === 'all' || !selectedIsland)) {
+                 throw new Error('Operators must select a specific island.');
             }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
 
-    const userSites = useMemo(() => {
-        if (!authContext?.user || !authContext?.island) return [];
-        const accessibleSites = sites.filter(site => authContext.user!.accessibleSites.includes(site.id));
-        if (authContext.island === 'all') return accessibleSites;
-        return accessibleSites.filter(site => `${site.atoll}. ${site.island}` === authContext.island);
-    }, [authContext?.user, authContext?.island, sites]);
-    
-    const allUserAccessibleSites = useMemo(() => {
-        if (!authContext?.user) return [];
-        return sites.filter(site => authContext.user!.accessibleSites.includes(site.id));
-    }, [authContext?.user, sites]);
+            // Step 1: Authenticate with Firebase Auth using the entered password
+            const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
+            
+            // Step 2: Verify user profile
+            const userProfile = await getUserProfile(userCredential.user.uid);
+            if (!userProfile) {
+                await auth.signOut();
+                throw new Error(`Authentication successful, but user profile not found (UID: ${userCredential.user.uid}). Check Firestore.`);
+            }
+            
+            localStorage.setItem('selectedIsland', selectedIsland);
 
-    const handleAddReading = async (newReading: Omit<Reading, 'id'>) => {
-        await dataService.addReading(newReading);
-        setIsAddReadingModalOpen(false);
+        } catch (err: any) {
+            console.error(err);
+             if (err.message && (err.message.includes('user profile not found') || err.message.includes('specific island'))) {
+                setError(err.message);
+            } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+                setError('Incorrect password.');
+            } else {
+                 setError('An unknown error occurred during login.');
+            }
+            localStorage.removeItem('selectedIsland');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleOpenEditReadingModal = (reading: Reading) => {
-        setEditingReading(reading);
-        setIsEditReadingModalOpen(true);
-    };
-
-    const handleUpdateReading = async (updatedReading: Reading) => {
-        await dataService.updateReading(updatedReading);
-        setIsEditReadingModalOpen(false);
-        setEditingReading(null);
-    };
-    
-    const handleAddSite = async (newSiteData: Omit<Site, 'id' | 'expectedMonthlyKwh'>) => {
-        await dataService.addSite(newSiteData);
-        setIsAddSiteModalOpen(false);
-    };
-
-    const handleSelectSiteToEdit = (site: Site) => {
-        setEditingSite(site);
-        setIsSelectSiteModalOpen(false);
-        setIsEditSiteModalOpen(true);
-    };
-
-    const handleUpdateSite = async (updatedSite: Site) => {
-        await dataService.updateSite(updatedSite);
-        setIsEditSiteModalOpen(false);
-        setEditingSite(null);
-        if(selectedSite?.id === updatedSite.id) setSelectedSite(updatedSite);
-    };
-    
-    const renderContent = () => {
-        if (!authContext?.user) return null;
-        if (isLoading) return <div className="text-center p-12">Loading live data from server...</div>;
-        
-        if (view === 'reports') return <Reports sites={userSites} readings={readings} />;
-
-        return (
-            <div className="space-y-8">
-                <AggregateStats sites={userSites} readings={readings} />
-                <BreakdownView 
-                    sites={allUserAccessibleSites} 
-                    readings={readings}
-                    userRole={authContext.user.role}
-                    selectedLocation={authContext.island}
-                />
-                <div>
-                    <h3 className="text-2xl font-bold text-brand-blue mt-8">Individual Sites</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
-                        {userSites.map(site => {
-                            const siteReadings = readings.filter(r => r.siteId === site.id);
-                            const latestReading = siteReadings.sort((a, b) => b.date.localeCompare(a.date))[0];
-                            return <SiteCard key={site.id} site={site} latestReading={latestReading} onClick={() => setSelectedSite(site)} />;
-                        })}
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    const FullScreenModal = () => (
-        <>
-            {isAddReadingModalOpen && <MeterReadingModal sites={userSites} readings={readings} onClose={() => setIsAddReadingModalOpen(false)} onSave={handleAddReading} />}
-            {isEditReadingModalOpen && editingReading && <EditReadingModal reading={editingReading} onClose={() => { setIsEditReadingModalOpen(false); setEditingReading(null); }} onSave={handleUpdateReading} />}
-            {isAddSiteModalOpen && <AddSiteModal onClose={() => setIsAddSiteModalOpen(false)} onSave={handleAddSite} />}
-            {isSelectSiteModalOpen && <SelectSiteModal sites={sites} onClose={() => setIsSelectSiteModalOpen(false)} onSelect={handleSelectSiteToEdit} />}
-            {isEditSiteModalOpen && editingSite && <EditSiteModal site={editingSite} onClose={() => { setIsEditSiteModalOpen(false); setEditingSite(null); }} onSave={handleUpdateSite} />}
-        </>
-    );
-
-    if (selectedSite) {
-        return (
-            <div className="min-h-screen bg-brand-gray">
-                <Header />
-                <SiteDetail 
-                    site={selectedSite} 
-                    readings={readings.filter(r => r.siteId === selectedSite.id)} 
-                    onBack={() => setSelectedSite(null)}
-                    onEditReading={handleOpenEditReadingModal}
-                />
-                <FullScreenModal />
-            </div>
-        );
-    }
-    
     return (
-        <div className="min-h-screen bg-brand-gray">
-            <Header />
-            <main className="container mx-auto p-4 sm:p-6 lg:p-8">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                   <div>
-                        <h2 className="text-3xl font-bold text-brand-blue">Dashboard</h2>
-                        <p className="text-gray-600 mt-1">Overview of solar assets</p>
-                   </div>
-                   <div className="flex items-center space-x-2 mt-4 sm:mt-0">
-                        <button onClick={() => setView('dashboard')} className={`px-4 py-2 rounded-md font-semibold transition ${view === 'dashboard' ? 'bg-brand-blue text-white' : 'bg-white text-gray-700'}`}>Dashboard</button>
-                        <button onClick={() => setView('reports')} className={`px-4 py-2 rounded-md font-semibold transition ${view === 'reports' ? 'bg-brand-blue text-white' : 'bg-white text-gray-700'}`}>Reports</button>
-                        <div className="relative" ref={actionsMenuRef}>
-                            <button onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)} className="flex items-center space-x-2 px-4 py-2 bg-brand-yellow text-brand-blue font-bold rounded-md shadow">
-                                <span>Actions</span>
-                                <ChevronDownIcon className="h-5 w-5" />
-                            </button>
-                            {isActionsMenuOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 py-1">
-                                    <button onClick={() => { setIsAddReadingModalOpen(true); setIsActionsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Add New Reading</button>
-                                    {authContext?.user?.role === Role.ADMIN && (
-                                        <>
-                                             <button onClick={() => { setIsAddSiteModalOpen(true); setIsActionsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Add New Site</button>
-                                             <button onClick={() => { setIsSelectSiteModalOpen(true); setIsActionsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Edit Site</button>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                   </div>
+        <div className="flex items-center justify-center min-h-screen bg-cyan-600">
+            <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl shadow-2xl">
+                <div className="text-center">
+                    <SunIcon className="w-16 h-16 mx-auto text-brand-yellow" />
+                    <h1 className="mt-4 text-3xl font-bold tracking-tight text-brand-blue">Solar PV Monitoring System</h1>
+                    <p className="mt-2 text-lg text-gray-600">Renewable Energy Department</p>
                 </div>
-                {renderContent()}
-            </main>
-            <FullScreenModal />
+                <form onSubmit={handleLogin} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Login As</label>
+                        <div className="mt-1 flex rounded-md shadow-sm">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedRole(Role.ADMIN)}
+                                className={`flex-1 px-4 py-2 text-sm font-medium border transition-colors ${selectedRole === Role.ADMIN ? 'bg-brand-blue text-white border-brand-blue z-10' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'} rounded-l-md focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue`}
+                            >
+                                Administrator
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedRole(Role.USER)}
+                                className={`-ml-px flex-1 px-4 py-2 text-sm font-medium border transition-colors ${selectedRole === Role.USER ? 'bg-brand-blue text-white border-brand-blue z-10' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'} rounded-r-md focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue`}
+                            >
+                                Operator
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label htmlFor="password-input" className="block text-sm font-medium text-gray-700">Password</label>
+                        <input 
+                            id="password-input" 
+                            type="password" 
+                            value={password} 
+                            onChange={(e) => setPassword(e.target.value)} 
+                            className="mt-1 block w-full px-3 py-2 text-base border-gray-300 rounded-md" 
+                            placeholder="Enter your password" 
+                            required 
+                        />
+                    </div>
+
+                     <div>
+                        <label htmlFor="island-select" className="block text-sm font-medium text-gray-700">Select Island to View</label>
+                        <select id="island-select" value={selectedIsland} onChange={(e) => setSelectedIsland(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                           {availableIslands.map((island) => (
+                                <option key={island} value={island}>
+                                    {island === 'all' ? 'All Islands' : island}
+                                </option>
+                            ))}
+                        </select>
+                         <p className="mt-1 text-xs text-gray-500">Operators will be restricted to their assigned island.</p>
+                    </div>
+
+                    {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+                    
+                    <button type="submit" disabled={isLoading} className="w-full px-4 py-3 text-lg font-semibold text-white bg-brand-blue rounded-lg hover:bg-brand-blue-light disabled:bg-gray-400">
+                        {isLoading ? 'Logging in...' : 'Login'}
+                    </button>
+                </form>
+            </div>
         </div>
     );
 };
 
-export default Dashboard;
+export default LoginScreen;
