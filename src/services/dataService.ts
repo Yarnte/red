@@ -10,33 +10,42 @@ import {
     onSnapshot,
     query
 } from 'firebase/firestore';
-// FIXED: Removed unused 'Role' import
 import { User, Site, Reading } from '../types';
 
 // --- User Profile Functions ---
 export const getUserProfile = async (uid: string): Promise<User | null> => {
-    const userDocRef = doc(db, 'users', uid);
-    const userDocSnap = await getDoc(userDocRef);
-    if (userDocSnap.exists()) {
-        const data = userDocSnap.data();
-        return {
-            id: userDocSnap.id,
-            name: data.name,
-            role: data.role,
-            accessibleSites: data.accessibleSites,
-        };
+    try {
+        const userDocRef = doc(db, 'users', uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+            const data = userDocSnap.data();
+            return {
+                id: userDocSnap.id,
+                name: data.name,
+                role: data.role,
+                accessibleSites: data.accessibleSites,
+            };
+        }
+        console.error("No such user profile document!");
+        return null;
+    } catch (error) {
+        console.error("Error fetching user profile:", error);
+        // Return null quietly so the app can handle the error state
+        return null;
     }
-    console.error("No such user profile document!");
-    return null;
 };
-
 
 // --- Site Functions ---
 export const getAllSites = async (): Promise<Site[]> => {
-    const sitesCollectionRef = collection(db, 'sites');
-    const sitesSnapshot = await getDocs(sitesCollectionRef);
-    const sitesList = sitesSnapshot.docs.map(doc => ({ ...doc.data(), id: parseInt(doc.id, 10) } as Site));
-    return sitesList.sort((a,b) => a.id - b.id);
+    try {
+        const sitesCollectionRef = collection(db, 'sites');
+        const sitesSnapshot = await getDocs(sitesCollectionRef);
+        const sitesList = sitesSnapshot.docs.map(doc => ({ ...doc.data(), id: parseInt(doc.id, 10) } as Site));
+        return sitesList.sort((a,b) => a.id - b.id);
+    } catch (error) {
+        console.error("Error fetching all sites:", error);
+        return [];
+    }
 };
 
 export const onSitesUpdate = (callback: (sites: Site[]) => void) => {
@@ -44,26 +53,39 @@ export const onSitesUpdate = (callback: (sites: Site[]) => void) => {
     return onSnapshot(query(sitesCollectionRef), (snapshot) => {
         const sitesList = snapshot.docs.map(doc => ({ ...doc.data(), id: parseInt(doc.id, 10) } as Site));
         callback(sitesList.sort((a,b) => a.id - b.id));
+    }, (error) => {
+        console.error("Error on sites update:", error);
     });
 };
 
 export const addSite = async (siteData: Omit<Site, 'id' | 'expectedMonthlyKwh'>) => {
-    const sites = await getAllSites();
-    const newSiteId = sites.length > 0 ? Math.max(...sites.map(s => s.id)) + 1 : 1;
-    
-    const newSite: Omit<Site, 'id'> = {
-        ...siteData,
-        expectedMonthlyKwh: siteData.capacityKw * 4.5 * 30,
-    };
-    
-    const siteDocRef = doc(db, 'sites', newSiteId.toString());
-    await setDoc(siteDocRef, newSite);
+    try {
+        const sites = await getAllSites();
+        const newSiteId = sites.length > 0 ? Math.max(...sites.map(s => s.id)) + 1 : 1;
+        
+        const newSite: Omit<Site, 'id'> = {
+            ...siteData,
+            expectedMonthlyKwh: siteData.capacityKw * 4.5 * 30,
+        };
+        
+        const siteDocRef = doc(db, 'sites', newSiteId.toString());
+        await setDoc(siteDocRef, newSite);
+    } catch (error) {
+        console.error("Error adding site:", error);
+        alert("Failed to add site. Check console for details.");
+    }
 };
 
 export const updateSite = async (site: Site) => {
-    const siteDocRef = doc(db, 'sites', site.id.toString());
-    const { id, ...siteData } = site;
-    await updateDoc(siteDocRef, siteData);
+    try {
+        const siteDocRef = doc(db, 'sites', site.id.toString());
+        // Firebase requires plain objects, so we remove the id before updating
+        const { id, ...siteData } = site;
+        await updateDoc(siteDocRef, siteData);
+    } catch (error) {
+        console.error("Error updating site:", error);
+        alert("Failed to update site. Check console for details.");
+    }
 };
 
 
@@ -78,16 +100,28 @@ export const onReadingsUpdate = (callback: (readings: Reading[]) => void, onInit
             onInitialLoad();
             isInitialLoad = false;
         }
+    }, (error) => {
+        console.error("Error on readings update:", error);
     });
 };
 
 export const addReading = async (readingData: Omit<Reading, 'id'>) => {
-    const readingsCollectionRef = collection(db, 'readings');
-    await addDoc(readingsCollectionRef, readingData);
+    try {
+        const readingsCollectionRef = collection(db, 'readings');
+        await addDoc(readingsCollectionRef, readingData);
+    } catch (error) {
+        console.error("Error adding reading:", error);
+        alert("Failed to add reading. Check console for details.");
+    }
 };
 
 export const updateReading = async (reading: Reading) => {
-    const readingDocRef = doc(db, 'readings', reading.id);
-    const { id, ...readingData } = reading;
-    await updateDoc(readingDocRef, readingData);
+    try {
+        const readingDocRef = doc(db, 'readings', reading.id);
+        const { id, ...readingData } = reading;
+        await updateDoc(readingDocRef, readingData);
+    } catch (error) {
+        console.error("Error updating reading:", error);
+        alert("Failed to update reading. Check console for details.");
+    }
 };
