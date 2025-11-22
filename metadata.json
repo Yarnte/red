@@ -1,0 +1,5 @@
+{
+  "name": "Solar PV Monitoring System - RED",
+  "description": "An application to monitor solar installation production, track efficiency, receive alerts for underperformance, and generate reports. It includes role-based access for different sites and an AI-powered performance analysis feature.",
+  "requestFramePermissions": []
+}
